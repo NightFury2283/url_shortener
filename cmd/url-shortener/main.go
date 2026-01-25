@@ -2,13 +2,16 @@ package main
 
 import (
 	"fmt"
+	"github.com/joho/godotenv"
+	"url-shortener/internal/config"
 )
 
 func main() {
-	fmt.Println("Welcome to the URL Shortener Service!")
 	//TODO: Init Config
+	_ = godotenv.Load("../../local.env")
 
-
+	cfg := config.MustLoad()
+	fmt.Println(cfg)
 
 	//TODO: Init Logger log/slog
 
