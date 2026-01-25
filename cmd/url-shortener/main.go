@@ -5,12 +5,13 @@ import (
 	"log/slog"
 	"os"
 	"url-shortener/internal/config"
+	"url-shortener/internal/storage/sqlite"
 
 	"github.com/joho/godotenv"
+	my_slog "url-shortener/internal/lib/logger/my_slog"
 )
 
 func main() {
-	//TODO: Init Config
 	_ = godotenv.Load("../../local.env")
 
 	cfg := config.MustLoad()
@@ -21,9 +22,13 @@ func main() {
 	log.Info("Logger initialized", slog.String("env", cfg.Env))
 	log.Debug("logger debug")
 
-	//TODO: Init Logger log/slog
+	storage, err := sqlite.New(cfg.StoragePath)
+	if err != nil {
+		log.Error("failed to init storage", my_slog.Err(err))
+		os.Exit(1)
+	}
 
-	//TODO: Init storage sqlite
+	_ = storage
 
 	//TODO: Init Router
 
@@ -47,7 +52,7 @@ func setupLogger(env string) *slog.Logger {
 		log = slog.New(
 			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
 		)
-		case envProd:
+	case envProd:
 		log = slog.New(
 			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
 		)

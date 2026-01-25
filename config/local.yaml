@@ -1,5 +1,5 @@
 env: "local" #local or dev, prod
-storage_path: "./storage/storage.db" #storage path
+storage_path: "../../storage/storage.db" #storage path
 http_server:
   address: "localhost:8082"
   timeout: 4s #seconds. time for reading/post request
