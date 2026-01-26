@@ -30,6 +30,14 @@ func main() {
 
 	_ = storage
 
+	id, err := storage.SaveUrl("https://example.com", "example")
+
+	if err != nil {
+		log.Error("failed to save url", my_slog.Err(err))
+	}
+
+	log.Info("URL saved", slog.Int64("id", id))
+
 	//TODO: Init Router
 
 	//TODO: Start Server
