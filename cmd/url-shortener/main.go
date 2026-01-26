@@ -7,8 +7,12 @@ import (
 	"url-shortener/internal/config"
 	"url-shortener/internal/storage/sqlite"
 
-	"github.com/joho/godotenv"
 	my_slog "url-shortener/internal/lib/logger/my_slog"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/joho/godotenv"
+	mw_logger "url-shortener/internal/http-server/middleware/logger"
 )
 
 func main() {
@@ -31,6 +35,14 @@ func main() {
 	_ = storage
 
 	//TODO: Init Router
+
+	router := chi.NewRouter()
+
+	router.Use(middleware.RequestID) //add id to all requests
+	router.Use(middleware.Logger)    //log all requests
+	router.Use(mw_logger.New(log))     //log all requests
+	router.Use(middleware.Recoverer) //recover from panics
+	router.Use(middleware.URLFormat) //parse url format
 
 	//TODO: Start Server
 }
