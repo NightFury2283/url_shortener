@@ -3,16 +3,19 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"url-shortener/internal/config"
 	"url-shortener/internal/storage/sqlite"
 
 	my_slog "url-shortener/internal/lib/logger/my_slog"
 
+	"url-shortener/internal/http-server/handlers/url/save"
+	mw_logger "url-shortener/internal/http-server/middleware/logger"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
-	mw_logger "url-shortener/internal/http-server/middleware/logger"
 )
 
 func main() {
@@ -40,11 +43,25 @@ func main() {
 
 	router.Use(middleware.RequestID) //add id to all requests
 	router.Use(middleware.Logger)    //log all requests
-	router.Use(mw_logger.New(log))     //log all requests
+	router.Use(mw_logger.New(log))   //log all requests
 	router.Use(middleware.Recoverer) //recover from panics
 	router.Use(middleware.URLFormat) //parse url format
 
-	//TODO: Start Server
+	router.Post("/url", save.New(log, storage))
+
+	log.Info("starting server", slog.String("address", cfg.Address))
+
+	srv := &http.Server{
+		Addr:         cfg.Address,
+		Handler:      router,
+		ReadTimeout:  cfg.HTTPServer.Timeout,
+		WriteTimeout: cfg.HTTPServer.Timeout,
+		IdleTimeout:  cfg.HTTPServer.IdleTimeout,
+	}
+	if err := srv.ListenAndServe(); err != nil {
+		log.Error("server failed to start", my_slog.Err(err))
+		os.Exit(1)
+	}
 }
 
 const (
