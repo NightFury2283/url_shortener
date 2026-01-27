@@ -2,15 +2,16 @@ package save
 
 import (
 	"errors"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
-	"github.com/go-playground/validator/v10"
 	"log/slog"
 	"net/http"
 	"url-shortener/internal/lib/api/response"
 	my_slog "url-shortener/internal/lib/logger/my_slog"
 	"url-shortener/internal/lib/random"
 	"url-shortener/internal/storage"
+
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/render"
+	"github.com/go-playground/validator/v10"
 )
 
 const (
@@ -19,6 +20,7 @@ const (
 
 type UrlSaver interface {
 	SaveURL(urlToSave string, alias string) (int64, error)
+	GetURL(alias string) (string, error)
 }
 
 func New(log *slog.Logger, urlSaver UrlSaver) http.HandlerFunc {
@@ -48,10 +50,28 @@ func New(log *slog.Logger, urlSaver UrlSaver) http.HandlerFunc {
 
 			return
 		}
-
 		alias := req.Alias
 		if alias == "" {
 			alias = random.GenerateRandomString(aliasLength)
+		}
+
+		for {
+
+			_, err = urlSaver.GetURL(alias)
+			if err == nil {
+				// alias exists
+				alias = random.GenerateRandomString(aliasLength)
+				continue
+			}
+
+			if errors.Is(err, storage.ErrUrlNotFound) {
+				// alias unique
+				break
+			}
+
+			log.Error("failed to check existing alias", my_slog.Err(err))
+			render.JSON(w, r, response.Error("internal error"))
+			return
 		}
 
 		id, err := urlSaver.SaveURL(req.URL, alias)
