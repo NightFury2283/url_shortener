@@ -1,0 +1,8 @@
+/storage/storage.db
+/storage/temp/
+/storage/cache/
+/logs/logs.txt
+/logs/temp/logs/
+/config/secrets.json
+/config/temp/
+*.log

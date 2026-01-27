@@ -14,11 +14,27 @@ import (
 )
 
 type MockURLSaver struct {
-	SaveURLFunc func(urlToSave string, alias string) (int64, error)
+	SaveURLFunc       func(urlToSave string, alias string) (int64, error)
+	GetURLFunc        func(alias string) (string, error)
+	GetAliasByURLFunc func(url string) (string, error)
 }
 
 func (m *MockURLSaver) SaveURL(urlToSave string, alias string) (int64, error) {
 	return m.SaveURLFunc(urlToSave, alias)
+}
+
+func (m *MockURLSaver) GetURL(alias string) (string, error) {
+	if m.GetURLFunc != nil {
+		return m.GetURLFunc(alias)
+	}
+	return "", nil
+}
+
+func (m *MockURLSaver) GetAliasByURL(url string) (string, error) {
+	if m.GetAliasByURLFunc != nil {
+		return m.GetAliasByURLFunc(url)
+	}
+	return "", nil
 }
 
 func TestSaveHandler_SuccessWithAlias(t *testing.T) {
