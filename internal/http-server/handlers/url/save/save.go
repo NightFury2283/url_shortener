@@ -21,6 +21,7 @@ const (
 type UrlSaver interface {
 	SaveURL(urlToSave string, alias string) (int64, error)
 	GetURL(alias string) (string, error)
+	GetAliasByURL(url string) (string, error)
 }
 
 func New(log *slog.Logger, urlSaver UrlSaver) http.HandlerFunc {
@@ -50,13 +51,23 @@ func New(log *slog.Logger, urlSaver UrlSaver) http.HandlerFunc {
 
 			return
 		}
+		//check for this url existing
+		if existingAlias, err := urlSaver.GetAliasByURL(req.URL); err == nil {
+			//exists
+			storage.ResponseOK(w, r, existingAlias)
+			return
+		} else if !errors.Is(err, storage.ErrUrlNotFound) {
+			log.Error("failed to check existing url", my_slog.Err(err))
+			render.JSON(w, r, response.Error("internal error"))
+			return
+		}
+
 		alias := req.Alias
 		if alias == "" {
 			alias = random.GenerateRandomString(aliasLength)
 		}
 
 		for {
-
 			_, err = urlSaver.GetURL(alias)
 			if err == nil {
 				// alias exists

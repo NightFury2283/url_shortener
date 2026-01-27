@@ -110,3 +110,23 @@ func (s *Storage) DeleteURL(alias string) error {
 
 	return nil
 }
+
+func (s *Storage) GetAliasByURL(url string) (string, error) {
+	const op = "storage.sqlite.GetAliasByURL"
+
+	stmt, err := s.db.Prepare("SELECT alias FROM url WHERE url = ?")
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	var resAlias string
+	err = stmt.QueryRow(url).Scan(&resAlias)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", storage.ErrUrlNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	return resAlias, nil
+}
