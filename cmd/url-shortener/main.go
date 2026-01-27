@@ -49,6 +49,10 @@ func main() {
 	router.Use(middleware.Recoverer) //recover from panics
 	router.Use(middleware.URLFormat) //parse url format
 
+	router.Use(middleware.BasicAuth("url-shortener", map[string]string{
+		cfg.HTTPServer.User: cfg.HTTPServer.Password,
+	}))
+
 	router.Post("/url", save.New(log, storage))
 	router.Get("/{alias}", redirect.New(log, storage))
 	router.Delete("/{alias}", delete.New(log, storage))
