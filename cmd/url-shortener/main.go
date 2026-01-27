@@ -11,6 +11,7 @@ import (
 	my_slog "url-shortener/internal/lib/logger/my_slog"
 
 	"url-shortener/internal/http-server/handlers/redirect"
+	"url-shortener/internal/http-server/handlers/url/delete"
 	"url-shortener/internal/http-server/handlers/url/save"
 	mw_logger "url-shortener/internal/http-server/middleware/logger"
 
@@ -50,6 +51,7 @@ func main() {
 
 	router.Post("/url", save.New(log, storage))
 	router.Get("/{alias}", redirect.New(log, storage))
+	router.Delete("/{alias}", delete.New(log, storage))
 
 	log.Info("starting server", slog.String("address", cfg.Address))
 

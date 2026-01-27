@@ -2,31 +2,20 @@ package save
 
 import (
 	"errors"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/render"
+	"github.com/go-playground/validator/v10"
 	"log/slog"
 	"net/http"
 	"url-shortener/internal/lib/api/response"
 	my_slog "url-shortener/internal/lib/logger/my_slog"
 	"url-shortener/internal/lib/random"
 	"url-shortener/internal/storage"
-
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
-	"github.com/go-playground/validator/v10"
 )
 
 const (
 	aliasLength = 8
 )
-
-type Request struct {
-	URL   string `json:"url" validate:"required,url"` //validate for validator lib: go-playground/validator/v10
-	Alias string `json:"alias,omitempty"`
-}
-
-type Response struct {
-	response.Response
-	Alias string `json:"alias,omitempty"`
-}
 
 type UrlSaver interface {
 	SaveURL(urlToSave string, alias string) (int64, error)
@@ -40,7 +29,7 @@ func New(log *slog.Logger, urlSaver UrlSaver) http.HandlerFunc {
 			slog.String("op", op),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
-		var req Request
+		var req storage.Request
 
 		err := render.DecodeJSON(r.Body, &req)
 
@@ -82,13 +71,6 @@ func New(log *slog.Logger, urlSaver UrlSaver) http.HandlerFunc {
 		}
 
 		log.Info("url added", slog.Int64("id", id))
-		responseOK(w, r, alias)
+		storage.ResponseOK(w, r, alias)
 	}
-}
-
-func responseOK(w http.ResponseWriter, r *http.Request, alias string) {
-	render.JSON(w, r, Response{
-		Response: response.OK(),
-		Alias:    alias,
-	})
 }

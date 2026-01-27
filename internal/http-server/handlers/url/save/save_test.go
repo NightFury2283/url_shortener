@@ -37,7 +37,7 @@ func TestSaveHandler_SuccessWithAlias(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	handler := New(logger, mockSaver)
 
-	reqBody := Request{
+	reqBody := storage.Request{
 		URL:   "https://example.com",
 		Alias: "myalias",
 	}
@@ -52,7 +52,7 @@ func TestSaveHandler_SuccessWithAlias(t *testing.T) {
 		t.Errorf("expected status 200, got %d", w.Code)
 	}
 
-	var resp Response
+	var resp storage.Response
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	if err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
@@ -83,7 +83,7 @@ func TestSaveHandler_SuccessWithRandomAlias(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	handler := New(logger, mockSaver)
 
-	reqBody := Request{
+	reqBody := storage.Request{
 		URL: "https://example.com",
 		// Alias not provided, should be generated randomly
 	}
@@ -98,7 +98,7 @@ func TestSaveHandler_SuccessWithRandomAlias(t *testing.T) {
 		t.Errorf("expected status 200, got %d", w.Code)
 	}
 
-	var resp Response
+	var resp storage.Response
 	json.Unmarshal(w.Body.Bytes(), &resp)
 
 	if resp.Alias == "" {
@@ -153,7 +153,7 @@ func TestSaveHandler_MissingURL(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	handler := New(logger, mockSaver)
 
-	reqBody := Request{
+	reqBody := storage.Request{
 		URL: "", // Missing URL
 	}
 
@@ -182,7 +182,7 @@ func TestSaveHandler_InvalidURL(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	handler := New(logger, mockSaver)
 
-	reqBody := Request{
+	reqBody := storage.Request{
 		URL: "not a valid url", // Invalid URL
 	}
 
@@ -214,7 +214,7 @@ func TestSaveHandler_URLAlreadyExists(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	handler := New(logger, mockSaver)
 
-	reqBody := Request{
+	reqBody := storage.Request{
 		URL:   "https://example.com",
 		Alias: "existingalias",
 	}
@@ -251,7 +251,7 @@ func TestSaveHandler_StorageError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	handler := New(logger, mockSaver)
 
-	reqBody := Request{
+	reqBody := storage.Request{
 		URL:   "https://example.com",
 		Alias: "myalias",
 	}
