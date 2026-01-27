@@ -1,12 +1,13 @@
 package redirect
 
 import (
-	"crypto/internal/fips140/alias"
 	"errors"
 	"log/slog"
 	"net/http"
 	"url-shortener/internal/lib/api/response"
+	"url-shortener/internal/storage"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 )
@@ -15,13 +16,13 @@ type URLGetter interface {
 	GetURL(alias string) (string, error)
 }
 
-func New(log *slog.Logger, urlGetter URLGetter) http.Handler {
+func New(log *slog.Logger, urlGetter URLGetter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "http-server.handlers.redirect.New"
 
 		log := log.With(
-			slog.String("op", op), 
-			slog.String("request_id", middleware.GetReqID(r.Context()))
+			slog.String("op", op),
+			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
 		alias := chi.URLParam(r, "alias")
@@ -34,14 +35,18 @@ func New(log *slog.Logger, urlGetter URLGetter) http.Handler {
 
 		resUrl, err := urlGetter.GetURL(alias)
 		if err != nil {
-			if errors.Is(err, urlGetter.ErrUrlNotFound) {
+			if errors.Is(err, storage.ErrUrlNotFound) {
 				log.Info("failed to get URL", slog.String("alias", alias), slog.String("error", err.Error()))
-				render.JSON(w, r, response.Error("failed to get URL"))
+				render.JSON(w, r, response.Error("URL not found"))
 				return
 			}
-			log.Info("failed to get URL", slog.String("alias", alias), slog.String("error", err.Error()), "internal error")
-				render.JSON(w, r, response.Error("failed to get URL, internal error"))
-				return
+			log.Info("failed to get URL",
+				slog.String("alias", alias),
+				slog.String("error", err.Error()),
+				slog.String("type", "internal error"),
+			)
+			render.JSON(w, r, response.Error("failed to get URL, internal error"))
+			return
 		}
 
 		log.Info("got url", slog.String("url", resUrl))

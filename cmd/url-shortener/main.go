@@ -10,6 +10,7 @@ import (
 
 	my_slog "url-shortener/internal/lib/logger/my_slog"
 
+	"url-shortener/internal/http-server/handlers/redirect"
 	"url-shortener/internal/http-server/handlers/url/save"
 	mw_logger "url-shortener/internal/http-server/middleware/logger"
 
