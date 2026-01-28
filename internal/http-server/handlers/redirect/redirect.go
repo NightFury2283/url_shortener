@@ -29,6 +29,7 @@ func New(log *slog.Logger, urlGetter URLGetter) http.HandlerFunc {
 
 		if alias == "" {
 			log.Info("alias is empty")
+			w.WriteHeader(http.StatusBadRequest)
 			render.JSON(w, r, response.Error("invalid request"))
 			return
 		}
@@ -37,6 +38,7 @@ func New(log *slog.Logger, urlGetter URLGetter) http.HandlerFunc {
 		if err != nil {
 			if errors.Is(err, storage.ErrUrlNotFound) {
 				log.Info("failed to get URL", slog.String("alias", alias), slog.String("error", err.Error()))
+				w.WriteHeader(http.StatusNotFound)
 				render.JSON(w, r, response.Error("URL not found"))
 				return
 			}
@@ -45,6 +47,7 @@ func New(log *slog.Logger, urlGetter URLGetter) http.HandlerFunc {
 				slog.String("error", err.Error()),
 				slog.String("type", "internal error"),
 			)
+			w.WriteHeader(http.StatusInternalServerError)
 			render.JSON(w, r, response.Error("failed to get URL, internal error"))
 			return
 		}

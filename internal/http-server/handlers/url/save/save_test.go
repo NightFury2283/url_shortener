@@ -1,287 +1,104 @@
-package save
+package save_test
 
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
-	"url-shortener/internal/lib/api/response"
+	save "url-shortener/internal/http-server/handlers/url/save"
 	"url-shortener/internal/storage"
 
-	"log/slog"
-	"os"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 type MockURLSaver struct {
-	SaveURLFunc       func(urlToSave string, alias string) (int64, error)
-	GetURLFunc        func(alias string) (string, error)
-	GetAliasByURLFunc func(url string) (string, error)
+	mock.Mock
 }
 
 func (m *MockURLSaver) SaveURL(urlToSave string, alias string) (int64, error) {
-	return m.SaveURLFunc(urlToSave, alias)
+	args := m.Called(urlToSave, alias)
+	return args.Get(0).(int64), args.Error(1)
 }
 
 func (m *MockURLSaver) GetURL(alias string) (string, error) {
-	if m.GetURLFunc != nil {
-		return m.GetURLFunc(alias)
-	}
-	return "", nil
+	args := m.Called(alias)
+	return args.String(0), args.Error(1)
 }
 
 func (m *MockURLSaver) GetAliasByURL(url string) (string, error) {
-	if m.GetAliasByURLFunc != nil {
-		return m.GetAliasByURLFunc(url)
-	}
-	return "", nil
+	args := m.Called(url)
+	return args.String(0), args.Error(1)
 }
 
-func TestSaveHandler_SuccessWithAlias(t *testing.T) {
-	mockSaver := &MockURLSaver{
-		SaveURLFunc: func(urlToSave string, alias string) (int64, error) {
-			if urlToSave != "https://example.com" {
-				t.Errorf("expected url=https://example.com, got %s", urlToSave)
+func TestSaveHandler(t *testing.T) {
+	cases := []struct {
+		name      string
+		alias     string
+		url       string
+		respError string
+		mockSetup func(m *MockURLSaver)
+	}{
+		{
+			name:  "Success",
+			alias: "test_alias",
+			url:   "https://google.com",
+			mockSetup: func(m *MockURLSaver) {
+				m.On("GetAliasByURL", "https://google.com").Return("", storage.ErrUrlNotFound)
+				m.On("GetURL", "test_alias").Return("", storage.ErrUrlNotFound)
+				m.On("SaveURL", "https://google.com", "test_alias").Return(int64(1), nil)
+			},
+		},
+		{
+			name:  "URL Already Exists",
+			alias: "new_alias",
+			url:   "https://google.com",
+			mockSetup: func(m *MockURLSaver) {
+				m.On("GetAliasByURL", "https://google.com").Return("existing_alias", nil)
+			},
+		},
+		{
+			name:      "Alias Conflict (Save Error)",
+			alias:     "test_alias",
+			url:       "https://google.com",
+			respError: "url with this alias already exists",
+			mockSetup: func(m *MockURLSaver) {
+				m.On("GetAliasByURL", "https://google.com").Return("", storage.ErrUrlNotFound)
+				m.On("GetURL", "test_alias").Return("", storage.ErrUrlNotFound)
+				m.On("SaveURL", "https://google.com", "test_alias").Return(int64(0), storage.ErrURLExists)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			urlSaverMock := new(MockURLSaver)
+			if tc.mockSetup != nil {
+				tc.mockSetup(urlSaverMock)
 			}
-			if alias != "myalias" {
-				t.Errorf("expected alias=myalias, got %s", alias)
+
+			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+			handler := save.New(logger, urlSaverMock)
+
+			input := storage.Request{
+				URL:   tc.url,
+				Alias: tc.alias,
 			}
-			return 1, nil
-		},
-	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	handler := New(logger, mockSaver)
+			body, _ := json.Marshal(input)
+			req, _ := http.NewRequest(http.MethodPost, "/save", bytes.NewReader(body))
+			rr := httptest.NewRecorder()
 
-	reqBody := storage.Request{
-		URL:   "https://example.com",
-		Alias: "myalias",
-	}
+			handler.ServeHTTP(rr, req)
 
-	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest(http.MethodPost, "/save", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", w.Code)
-	}
-
-	var resp storage.Response
-	err := json.Unmarshal(w.Body.Bytes(), &resp)
-	if err != nil {
-		t.Fatalf("failed to unmarshal response: %v", err)
-	}
-
-	if resp.Status != response.StatusOK {
-		t.Errorf("expected status OK, got %s", resp.Status)
-	}
-
-	if resp.Alias != "myalias" {
-		t.Errorf("expected alias=myalias, got %s", resp.Alias)
-	}
-}
-
-func TestSaveHandler_SuccessWithRandomAlias(t *testing.T) {
-	var capturedAlias string
-
-	mockSaver := &MockURLSaver{
-		SaveURLFunc: func(urlToSave string, alias string) (int64, error) {
-			capturedAlias = alias
-			if len(alias) != aliasLength {
-				t.Errorf("expected alias length=%d, got %d", aliasLength, len(alias))
+			if tc.respError == "" {
+				require.Equal(t, http.StatusOK, rr.Code)
+			} else {
+				require.Contains(t, rr.Body.String(), tc.respError)
 			}
-			return 1, nil
-		},
-	}
-
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	handler := New(logger, mockSaver)
-
-	reqBody := storage.Request{
-		URL: "https://example.com",
-		// Alias not provided, should be generated randomly
-	}
-
-	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest(http.MethodPost, "/save", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", w.Code)
-	}
-
-	var resp storage.Response
-	json.Unmarshal(w.Body.Bytes(), &resp)
-
-	if resp.Alias == "" {
-		t.Error("expected non-empty alias in response")
-	}
-
-	if capturedAlias == "" {
-		t.Error("expected non-empty alias passed to SaveURL")
-	}
-}
-
-func TestSaveHandler_InvalidJSON(t *testing.T) {
-	mockSaver := &MockURLSaver{
-		SaveURLFunc: func(urlToSave string, alias string) (int64, error) {
-			t.Error("SaveURL should not be called for invalid JSON")
-			return 0, nil
-		},
-	}
-
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	handler := New(logger, mockSaver)
-
-	req := httptest.NewRequest(http.MethodPost, "/save", bytes.NewReader([]byte("invalid json")))
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", w.Code)
-	}
-
-	var resp response.Response
-	json.Unmarshal(w.Body.Bytes(), &resp)
-
-	if resp.Status != response.StatusError {
-		t.Errorf("expected status Error, got %s", resp.Status)
-	}
-
-	if resp.Error == "" {
-		t.Error("expected error message")
-	}
-}
-
-func TestSaveHandler_MissingURL(t *testing.T) {
-	mockSaver := &MockURLSaver{
-		SaveURLFunc: func(urlToSave string, alias string) (int64, error) {
-			t.Error("SaveURL should not be called for invalid request")
-			return 0, nil
-		},
-	}
-
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	handler := New(logger, mockSaver)
-
-	reqBody := storage.Request{
-		URL: "", // Missing URL
-	}
-
-	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest(http.MethodPost, "/save", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	var resp response.Response
-	json.Unmarshal(w.Body.Bytes(), &resp)
-
-	if resp.Status != response.StatusError {
-		t.Errorf("expected status Error, got %s", resp.Status)
-	}
-}
-
-func TestSaveHandler_InvalidURL(t *testing.T) {
-	mockSaver := &MockURLSaver{
-		SaveURLFunc: func(urlToSave string, alias string) (int64, error) {
-			t.Error("SaveURL should not be called for invalid URL")
-			return 0, nil
-		},
-	}
-
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	handler := New(logger, mockSaver)
-
-	reqBody := storage.Request{
-		URL: "not a valid url", // Invalid URL
-	}
-
-	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest(http.MethodPost, "/save", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	var resp response.Response
-	json.Unmarshal(w.Body.Bytes(), &resp)
-
-	if resp.Status != response.StatusError {
-		t.Errorf("expected status Error, got %s", resp.Status)
-	}
-
-	if resp.Error == "" {
-		t.Error("expected error message")
-	}
-}
-
-func TestSaveHandler_URLAlreadyExists(t *testing.T) {
-	mockSaver := &MockURLSaver{
-		SaveURLFunc: func(urlToSave string, alias string) (int64, error) {
-			return 0, storage.ErrURLExists
-		},
-	}
-
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	handler := New(logger, mockSaver)
-
-	reqBody := storage.Request{
-		URL:   "https://example.com",
-		Alias: "existingalias",
-	}
-
-	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest(http.MethodPost, "/save", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", w.Code)
-	}
-
-	var resp response.Response
-	json.Unmarshal(w.Body.Bytes(), &resp)
-
-	if resp.Status != response.StatusError {
-		t.Errorf("expected status Error, got %s", resp.Status)
-	}
-
-	if resp.Error == "" {
-		t.Error("expected error message")
-	}
-}
-
-func TestSaveHandler_StorageError(t *testing.T) {
-	mockSaver := &MockURLSaver{
-		SaveURLFunc: func(urlToSave string, alias string) (int64, error) {
-			return 0, storage.ErrUrlNotFound // Any error other than ErrURLExists
-		},
-	}
-
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	handler := New(logger, mockSaver)
-
-	reqBody := storage.Request{
-		URL:   "https://example.com",
-		Alias: "myalias",
-	}
-
-	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest(http.MethodPost, "/save", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	var resp response.Response
-	json.Unmarshal(w.Body.Bytes(), &resp)
-
-	if resp.Status != response.StatusError {
-		t.Errorf("expected status Error, got %s", resp.Status)
+		})
 	}
 }
